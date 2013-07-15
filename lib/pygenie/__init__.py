@@ -2,7 +2,6 @@
 
 import os
 import sys
-from glob import glob
 from optparse import OptionParser
 
 import cc
@@ -44,6 +43,14 @@ def find_module(fqn):
             return path
     raise Exception('invalid module')
 
+def add_files_from_dir(items, dirname, recursive):
+    for name in os.listdir(dirname):
+        f = os.path.join(dirname, name)
+        if name.endswith('.py'):
+            if os.path.isfile(f):
+                items.add(os.path.abspath(f))
+        elif recursive and os.path.isdir(f):
+            add_files_from_dir(items, f, recursive)
 
 def main():
     from optparse import OptionParser
@@ -52,15 +59,17 @@ def main():
     parser.add_option('-v', '--verbose',
             dest='verbose', action='store_true', default=False,
             help='print detailed statistics to stdout')
+    parser.add_option('-r', '--recursive',
+            dest='recursive', action='store_true', default=False,
+            help='analyse directories recursively')
+    
     parser = CommandParser(parser, COMMANDS)
     command, options, args = parser.parse_args()
 
     items = set()
     for arg in args:
         if os.path.isdir(arg):
-            for f in glob(os.path.join(arg, '*.py')):
-                if os.path.isfile(f):
-                    items.add(os.path.abspath(f))
+            add_files_from_dir(items, arg, options.recursive)
         elif os.path.isfile(arg):
             items.add(os.path.abspath(arg))
         else:
@@ -73,7 +82,6 @@ def main():
             stats = cc.measure_complexity(code, item)
             pp = cc.PrettyPrinter(sys.stdout, verbose=options.verbose)
             pp.pprint(item, stats)
-
 
 if __name__ == '__main__':
     main()
