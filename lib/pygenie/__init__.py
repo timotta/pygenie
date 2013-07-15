@@ -5,6 +5,7 @@ import sys
 from optparse import OptionParser
 
 import cc
+import re
 
 
 COMMANDS = ['all', 'complexity', ]
@@ -29,12 +30,17 @@ class CommandParser(object):
         options, values = self.optparser.parse_args(args[1:], values)
         return command, options, values
 
+def should_exclude(path, options):
+    if options.exclude_pattern:
+        return path.find(options.exclude_pattern)!=-1 or re.match(options.exclude_pattern, path)
 
-def find_module(fqn):
+def find_module(fqn, options):
     join = os.path.join
     exists = os.path.exists
     partial_path = fqn.replace('.', os.path.sep)
     for p in sys.path:
+        if should_exclude(p, options):
+            continue
         path = join(p, partial_path, '__init__.py')
         if exists(path):
             return path
@@ -43,14 +49,16 @@ def find_module(fqn):
             return path
     raise Exception('invalid module')
 
-def add_files_from_dir(items, dirname, recursive):
+def add_files_from_dir(items, dirname, options):
     for name in os.listdir(dirname):
         f = os.path.join(dirname, name)
+        if should_exclude(f, options):
+            continue
         if name.endswith('.py'):
             if os.path.isfile(f):
                 items.add(os.path.abspath(f))
-        elif recursive and os.path.isdir(f):
-            add_files_from_dir(items, f, recursive)
+        elif options.recursive and os.path.isdir(f):
+            add_files_from_dir(items, f, options)
 
 def main():
     from optparse import OptionParser
@@ -62,6 +70,9 @@ def main():
     parser.add_option('-r', '--recursive',
             dest='recursive', action='store_true', default=False,
             help='analyse directories recursively')
+    parser.add_option('-e', '--exclude-pattern',
+            dest='exclude_pattern', action='store', default=None,
+            help='pattern to exclude files and directories')
     
     parser = CommandParser(parser, COMMANDS)
     command, options, args = parser.parse_args()
@@ -69,12 +80,12 @@ def main():
     items = set()
     for arg in args:
         if os.path.isdir(arg):
-            add_files_from_dir(items, arg, options.recursive)
+            add_files_from_dir(items, arg, options)
         elif os.path.isfile(arg):
             items.add(os.path.abspath(arg))
         else:
             # this should be a package'
-            items.add(find_module(arg))
+            items.add(find_module(arg, options))
 
     for item in items:
         code = open(item).read()
